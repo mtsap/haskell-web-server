@@ -57,4 +57,4 @@ addShoe shoeToAdd shoes =
     else shoeToAdd : shoes
 
 aShoe :: [Int] -> [Int]
-aShoe = fmap (+ 1)
+aShoe = undefined
