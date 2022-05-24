@@ -1,0 +1,125 @@
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+module Main where
+
+import Acme.Missiles
+import Control.Monad
+import Control.Monad.IO.Class (MonadIO (liftIO))
+import qualified Data.Aeson as A
+import Data.Fixed (showFixed)
+import Data.Foldable (Foldable (fold))
+import Data.List
+import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
+import Data.Text.Lazy (Text)
+import Lib
+import ShoeService
+import qualified ShoeService
+import System.IO.Error (fullErrorType)
+import Text.Regex.Applicative
+import Text.Regex.Applicative.Common (decimal)
+import Web.Scotty
+
+-- main :: IO ()
+-- main = scotty 3000 $ do
+--   get "/" $ do
+--     shoesFromFile <- liftIO ShoeService.readShoes
+--     let parsedShoes = A.decode shoesFromFile :: Maybe [ShoeService.Shoe]
+--     json parsedShoes
+--   get "/shoe/:shoeId" $ do
+--     shoeId <- param "shoeId"
+--     shoesFromFile <- liftIO ShoeService.readShoes
+--     let shoe = A.decode shoesFromFile >>= ShoeService.findById shoeId
+--     json shoe
+--   post "/shoe/" $ do
+--     liftIO $ putStrLn "Weee"
+--     shoeFromBody <- jsonData :: ActionM Shoe
+--     shoesFromFile <- liftIO ShoeService.readShoes
+--     let parsedShoes = A.decode shoesFromFile :: Maybe [ShoeService.Shoe]
+--     let newShoes = fmap (ShoeService.addShoe shoeFromBody) parsedShoes
+--     liftIO $ ShoeService.saveShoes . A.encode $ newShoes
+--     text "ok"
+type Input = [Line]
+
+data Line = Line {_from, _to :: Coord Int} deriving (Show)
+data Coord a = Coord {_x, _y :: a}
+  deriving (Show, Eq, Ord)
+
+input :: RE Char Input
+input = many line
+
+line :: RE Char Line
+line = Line <$> coord <* string " -> " <*> coord <* sym '\n'
+
+coord :: RE Char (Coord Int)
+coord = Coord <$> (decimal <* sym ',') <*> decimal
+
+prepare :: String -> Input
+prepare = fromMaybe [] . (=~ input)
+
+-- main :: IO ()
+-- main = do
+--   contents <- readFile "input.txt"
+--   let myData = match coord "443,422"
+--   let full = prepare contents
+--   print myData
+--   print fullErrorType()
+
+data Data = Data {records :: [Record]} deriving (Show)
+
+data Record = Record {include :: Bool, ranges :: [(Int, Int)]} deriving (Show)
+
+example2 :: Data
+example2 =
+  Data
+    { records =
+        [ Record
+            { include = True
+            , ranges =
+                [ (2000, 2000)
+                , (2007, 2008)
+                , (2008, 2009)
+                ]
+            }
+        , Record
+            { include = False
+            , ranges =
+                [ (2001, 2004)
+                , (2006, 2013)
+                ]
+            }
+        , Record
+            { include = True
+            , ranges =
+                [ (2007, 2008)
+                , (2007, 2009)
+                ]
+            }
+        , Record
+            { include = True
+            , ranges =
+                [ (2008, 2010)
+                ]
+            }
+        ]
+    }
+calcRanges :: Record -> [[Int]]
+calcRanges rec = map (\t -> [fst t .. snd t]) $ ranges rec
+
+countElems :: (Ord a) => [a] -> Map.Map a Int
+countElems = Map.fromListWith (+) . flip zip (repeat 1)
+
+main :: IO ()
+main = do
+  let rec = filter include $ records example2
+  -- let values = Map.fromListWith (+) $ map (\x -> (x, 1)) $ concat (concatMap calcRanges rec)
+  let values = foldr (((Map.unionWith (+) . (countElems . Set.toList . Set.fromList)) . concat) . calcRanges) Map.empty rec
+  let years = map fst $ Map.toList values
+  let fullRange = Map.fromList $ map (\x -> (x, 0)) [(minimum years) .. (maximum years)]
+  let finalData = Map.unionWith (+) fullRange values
+  print finalData
+  print "dfdfsfdf"
+  forM_ (Map.toList finalData) \i -> do
+    print (show (fst i) ++ ": " ++ (intercalate "" $ map (const "#") [1 .. snd i]))
